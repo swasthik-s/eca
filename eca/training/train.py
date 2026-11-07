@@ -75,8 +75,7 @@ def train(args: argparse.Namespace) -> None:
         ):
             logits, boundaries, state = model(x, state)
             prediction_loss = F.cross_entropy(logits.reshape(-1, 257), y.reshape(-1))
-            boundary_cost = boundaries.mean()
-            loss = prediction_loss + args.boundary_penalty * boundary_cost
+            loss = prediction_loss
 
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
@@ -140,7 +139,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--hidden-size", type=int, default=192)
     p.add_argument("--embedding-size", type=int, default=48)
     p.add_argument("--learning-rate", type=float, default=3e-4)
-    p.add_argument("--boundary-penalty", type=float, default=0.002)
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--seed", type=int, default=17)
     p.add_argument("--output", default="checkpoints/eca_adaptive_text.pt")
