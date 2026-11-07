@@ -71,11 +71,6 @@ class ECAStreamModel(nn.Module):
             nn.GELU(),
             nn.Linear(h, self.config.eos_id + 1),
         )
-        self.halt_controller = nn.Sequential(
-            nn.Linear(h * 2, h // 2),
-            nn.Tanh(),
-            nn.Linear(h // 2, 1),
-        )
 
     def initial_state(self, batch_size: int, device: torch.device | str) -> StreamState:
         h = self.config.hidden_size
