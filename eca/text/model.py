@@ -51,7 +51,7 @@ class ECAStreamModel(nn.Module):
     classes: 0..255 for the next UTF-8 byte and 256 for a learned end marker.
     """
 
-    input_alphabet_size = 256
+    input_alphabet_size = 257  # 0..255 bytes plus one structural EOS control symbol
 
     def __init__(self, config: ECAConfig | None = None) -> None:
         super().__init__()
@@ -87,8 +87,8 @@ class ECAStreamModel(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, StreamState]:
         if byte_ids.ndim != 2:
             raise ValueError("byte_ids must have shape [batch, time].")
-        if byte_ids.numel() and (byte_ids.min() < 0 or byte_ids.max() >= 256):
-            raise ValueError("Input IDs must be UTF-8 byte values in [0, 255].")
+        if byte_ids.numel() and (byte_ids.min() < 0 or byte_ids.max() > self.config.eos_id):
+            raise ValueError("Input IDs must be UTF-8 bytes [0, 255] or the EOS control symbol [256].")
 
         batch, steps = byte_ids.shape
         if state is None:
@@ -124,11 +124,8 @@ class ECAStreamModel(nn.Module):
 
             combined = self.dropout(torch.cat((fast, slow), dim=-1))
             logits = self.predictor(combined)
-            halt_probability = torch.sigmoid(self.halt_controller(combined))
-
             logits_out.append(logits)
             boundary_out.append(boundary_probability.squeeze(-1))
-            halt_out.append(halt_probability.squeeze(-1))
             previous_logits = logits
 
         if steps == 0:
