@@ -202,6 +202,25 @@ def train(args: argparse.Namespace) -> None:
             optimizer.zero_grad(set_to_none=True)
             state = None
             print(f"step={step} non_finite_gradient; update skipped")
+            if bad_gradient_steps >= args.bad_step_limit:
+                if not best_path.exists():
+                    raise RuntimeError("Repeated non-finite gradients before a valid checkpoint.")
+                if recovery_count >= args.max_recoveries:
+                    raise RuntimeError("Recovery limit reached after non-finite gradients.")
+                saved = torch.load(best_path, map_location=device, weights_only=True)
+                model.load_state_dict(saved["model"])
+                optimizer.load_state_dict(saved["optimizer"])
+                scaler.load_state_dict(saved["scaler"])
+                for group in optimizer.param_groups:
+                    group["lr"] *= args.lr_decay
+                recovery_count += 1
+                target_steps += args.recovery_extra_steps
+                bad_gradient_steps = 0
+                print(
+                    f"RECOVERY {recovery_count}: restored step={saved['step']} "
+                    f"after unstable gradients; lr={optimizer.param_groups[0]['lr']:.2e}; "
+                    f"extra_steps={args.recovery_extra_steps}"
+                )
             continue
         scaler.step(optimizer)
         scaler.update()
