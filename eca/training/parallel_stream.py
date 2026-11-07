@@ -83,6 +83,8 @@ class ParallelLaneByteStream:
             raise ValueError("sequence_length must be positive")
         rows: list[list[int]] = []
         with self._cv:
+            if self._finished and all(not queue for queue in self._queues):
+                return []
             for lane in range(self.lanes):
                 row: list[int] = []
                 while len(row) < sequence_length + 1:
@@ -96,8 +98,6 @@ class ParallelLaneByteStream:
                     elif self._error is not None:
                         raise RuntimeError("Parallel data producer failed") from self._error
                     elif self._finished:
-                        if not row:
-                            return rows
                         row.extend([self.eos_id] * (sequence_length + 1 - len(row)))
                     else:
                         self._cv.wait()
