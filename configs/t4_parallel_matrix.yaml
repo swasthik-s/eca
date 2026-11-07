@@ -1,9 +1,9 @@
 model:
   architecture: ECAParallelMatrixModel
   version: "0.3-experimental"
-  hidden_size: 192
-  byte_embedding_size: 48
-  depth: 3
+  hidden_size: 144
+  byte_embedding_size: 32
+  depth: 1
   kernel_size: 5
   input_alphabet: 257
   output_alphabet: 257
