@@ -45,7 +45,12 @@ def documents_to_byte_stream(
 
 
 def make_next_byte_batch(
-    stream: list[int], start: int, batch_size: int, sequence_length: int, device: str
+    stream: list[int],
+    start: int,
+    batch_size: int,
+    sequence_length: int,
+    device: str,
+    lane_stride: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Create input bytes and next-byte/EOS targets for one TBPTT segment."""
     x_rows, y_rows = [], []
