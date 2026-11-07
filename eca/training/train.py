@@ -44,7 +44,7 @@ def train(args: argparse.Namespace) -> None:
     config = ECAConfig(hidden_size=args.hidden_size, byte_embedding_size=args.embedding_size)
     model = ECAStreamModel(config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=0.01)
-    scaler = torch.amp.GradScaler("cuda", enabled=(device == "cuda"))
+    scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
     print(f"device={device} parameters={sum(p.numel() for p in model.parameters()):,}")
     print(
         f"train_bytes_and_controls={len(train_stream):,} "
