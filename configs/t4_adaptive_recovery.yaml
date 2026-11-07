@@ -1,0 +1,43 @@
+model:
+  architecture: ECAParallelMatrixModel
+  version: "0.4-experimental"
+  hidden_size: 256
+  byte_embedding_size: 64
+  depth: 2
+  kernel_size: 5
+  input_alphabet: 257
+  output_alphabet: 257
+  recurrence: elementwise_affine_associative_scan
+  attention: false
+  transformer_components: false
+  tokenizer: raw_utf8_bytes
+training:
+  dataset: HuggingFaceFW/fineweb-edu
+  dataset_config: sample-10BT
+  streaming: true
+  max_bytes: 2000000
+  initial_steps: 600
+  batch_size: 8
+  tbptt_segment_length: 256
+  learning_rate: 0.0003
+  write_cost_weight: 0.001
+  precision: fp16
+recovery:
+  validation_metric: bits_per_byte
+  evaluation_interval: 50
+  patience: 3
+  minimum_improvement_bpb: 0.002
+  restore: best_model_optimizer_and_scaler
+  learning_rate_multiplier: 0.5
+  extra_steps_per_recovery: 200
+  maximum_recoveries: 3
+checkpoints:
+  best: checkpoints/eca_0_4_best.pt
+  latest: checkpoints/eca_0_4_latest.pt
+notes:
+  - Validation data is held out from the training stream.
+  - Best checkpoint selection uses validation BPB, not training loss.
+  - Recovery restores model, optimizer and mixed precision scaler.
+  - Transient recurrent activations are reset and recomputed after rollback.
+  - Recovery adds a bounded compute budget and reduces learning rate.
+  - BPB evaluates byte prediction, not reasoning or semantic understanding.
