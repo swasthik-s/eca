@@ -47,8 +47,8 @@ class StreamState:
 class ECAStreamModel(nn.Module):
     """Causal recurrent processor with learned adaptive consolidation.
 
-    Byte IDs 0..255 are the complete input alphabet. The output has 257
-    classes: 0..255 for the next UTF-8 byte and 256 for a learned end marker.
+    Byte IDs 0..255 carry UTF-8 text; ID 256 is a structural EOS control
+    symbol. The output predicts the next byte or EOS as a learned stop action.
     """
 
     input_alphabet_size = 257  # 0..255 bytes plus one structural EOS control symbol
@@ -90,7 +90,7 @@ class ECAStreamModel(nn.Module):
             state = self.initial_state(batch, byte_ids.device)
         fast, slow = state.fast, state.slow
         previous_logits = state.previous_logits
-        logits_out, boundary_out, halt_out = [], [], []
+        logits_out, boundary_out = [], []
 
         for t in range(steps):
             current_byte = byte_ids[:, t]
