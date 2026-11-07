@@ -99,8 +99,8 @@ def train(args: argparse.Namespace) -> None:
         1, (lane_stride - args.sequence_length - 1) // args.sequence_length
     )
     state = None
-    started = time.perf_counter()
-    processed_bytes = 0
+    window_started = time.perf_counter()
+    window_bytes = 0
 
     for step in range(1, args.steps + 1):
         model.train()
@@ -128,14 +128,16 @@ def train(args: argparse.Namespace) -> None:
         scaler.step(optimizer)
         scaler.update()
         state = state.detach()
-        processed_bytes += x.numel()
+        window_bytes += x.numel()
 
         if step == 1 or step % args.log_every == 0:
             if device == "cuda":
                 torch.cuda.synchronize()
-            elapsed = max(time.perf_counter() - started, 1e-9)
-            throughput = processed_bytes / elapsed
+            elapsed = max(time.perf_counter() - window_started, 1e-9)
+            throughput = window_bytes / elapsed
             valid_bpb = evaluate(model, valid_stream, args.sequence_length, device)
+            window_bytes = 0
+            window_started = time.perf_counter()
             peak_memory = (
                 torch.cuda.max_memory_allocated() / (1024 ** 3)
                 if device == "cuda" else 0.0
