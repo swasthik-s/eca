@@ -162,7 +162,9 @@ class ECAParallelMatrixModel(nn.Module):
         embedded = self.byte_embedding(byte_ids)
         projected = self.input_projection(embedded)
         projected_channels = projected.transpose(1, 2)
-        memory_initial = state.memory.to(device=byte_ids.device, dtype=projected.dtype)
+        # Keep persistent memory and the associative scan in FP32 for stability
+        # over long streams, even when feature projections use FP16 autocast.
+        memory_initial = state.memory.to(device=byte_ids.device, dtype=torch.float32)
         conv_history = state.conv_history.to(device=byte_ids.device, dtype=projected.dtype)
 
         # Cached left context makes causal convolution invariant to chunk splits.
@@ -179,10 +181,12 @@ class ECAParallelMatrixModel(nn.Module):
         )
         write = (1.0 - retention) * torch.tanh(self.write_projection(features))
         memory_sequence, final_memory = self.affine_parallel_scan(
-            retention, write, memory_initial
+            retention.float(), write.float(), memory_initial
         )
 
-        logits = self.predictor(torch.cat((features, memory_sequence), dim=-1))
+        logits = self.predictor(
+            torch.cat((features, memory_sequence.to(features.dtype)), dim=-1)
+        )
         write_intensity = (1.0 - retention).mean(dim=-1)
 
         joined_history = torch.cat((conv_history, projected_channels), dim=-1)
