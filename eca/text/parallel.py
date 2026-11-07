@@ -162,9 +162,11 @@ class ECAParallelMatrixModel(nn.Module):
         embedded = self.byte_embedding(byte_ids)
         projected = self.input_projection(embedded)
         projected_channels = projected.transpose(1, 2)
+        memory_initial = state.memory.to(device=byte_ids.device, dtype=projected.dtype)
+        conv_history = state.conv_history.to(device=byte_ids.device, dtype=projected.dtype)
 
         # Cached left context makes causal convolution invariant to chunk splits.
-        conv_input = torch.cat((state.conv_history, projected_channels), dim=-1)
+        conv_input = torch.cat((conv_history, projected_channels), dim=-1)
         local_features = self.causal_conv(conv_input).transpose(1, 2)
         features = self.input_norm(projected + local_features)
         for block in self.blocks:
@@ -177,13 +179,13 @@ class ECAParallelMatrixModel(nn.Module):
         )
         write = (1.0 - retention) * torch.tanh(self.write_projection(features))
         memory_sequence, final_memory = self.affine_parallel_scan(
-            retention, write, state.memory
+            retention, write, memory_initial
         )
 
         logits = self.predictor(torch.cat((features, memory_sequence), dim=-1))
         write_intensity = (1.0 - retention).mean(dim=-1)
 
-        joined_history = torch.cat((state.conv_history, projected_channels), dim=-1)
+        joined_history = torch.cat((conv_history, projected_channels), dim=-1)
         next_history = joined_history[..., -(self.config.kernel_size - 1):]
         next_state = ParallelStreamState(final_memory, next_history)
         return logits, write_intensity, next_state
