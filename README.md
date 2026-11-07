@@ -213,3 +213,21 @@ Develop and experimentally validate an adaptive, multimodal cognitive architectu
 ---
 
 *ECA is an experimental research project. Its architecture and capabilities are under active development; the objectives above are not claims of achieved performance.*
+
+
+## Quick start
+
+Install the package in editable mode:
+
+```bash
+git clone https://github.com/swasthik-s/eca.git
+cd eca
+python -m venv .venv
+# Windows: .venv\\Scripts\\activate
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -e ".[dev]"
+pytest
+python examples/first_observation.py
+```
+
+The initial prototype uses NumPy and runs on CPU. PyTorch and GPU training will be introduced when the first learned components are ready.
