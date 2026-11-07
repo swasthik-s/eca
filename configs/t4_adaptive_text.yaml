@@ -1,0 +1,25 @@
+model:
+  architecture: ECAStreamModel
+  hidden_size: 192
+  byte_embedding_size: 48
+  input_alphabet: 256
+  output_alphabet: 257
+  adaptive_boundaries: true
+  recurrent_fast_slow_dynamics: true
+  transformer_components: false
+  attention: false
+training:
+  dataset: HuggingFaceFW/fineweb-edu
+  dataset_config: sample-10BT
+  streaming: true
+  max_bytes: 2000000
+  steps: 1000
+  batch_size: 8
+  tbptt_segment_length: 256
+  learning_rate: 0.0003
+  precision: fp16
+  checkpoint: checkpoints/eca_adaptive_text.pt
+notes:
+  - tbptt_segment_length bounds training activation memory; it is not an inference context window.
+  - recurrent state is carried across segments and can persist across arbitrarily many input chunks.
+  - EOS is a learned output class; max_new_bytes is only a generation safety budget.
