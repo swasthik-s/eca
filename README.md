@@ -6,7 +6,7 @@ ECA is a research and engineering project exploring computational foundations fo
 
 > **Core principle:** language is one modality, not the foundation of the entire intelligence system.
 
-**Status:** ECA-0.1 adaptive recurrent text prototype implemented; first GPU experiment pending  
+**Status:** ECA-0.2 adaptive-consolidation baseline and ECA-0.3 parallel matrix experiment implemented; ECA-0.3 T4 validation pending  
 **Language:** Python  
 **Initial research hardware:** NVIDIA T4 (15 GB VRAM)  
 **Initial framework:** PyTorch  
@@ -233,22 +233,22 @@ python examples/first_observation.py
 The initial prototype uses NumPy and runs on CPU. PyTorch and GPU training will be introduced when the first learned components are ready.
 
 
-## ECA-0.1: adaptive recurrent text model
+## ECA-0.1 and ECA-0.2: adaptive recurrent text model
 
-The first learned model is a compact, from-scratch PyTorch system:
+The first learned model is a compact, from-scratch PyTorch system. ECA-0.1 exposed a controller-collapse failure: its mean consolidation probability rose to approximately 0.956. ECA-0.2 replaces the fixed threshold with a learned two-action policy:
 
 `UTF-8 byte stream → fast recurrent state → adaptive boundary controller → gated slow-state consolidation → next-byte/EOS prediction`
 
 - Input is raw UTF-8 bytes (0–255) plus one structural end-of-document control symbol; there is no BPE, WordPiece, SentencePiece or manually defined word vocabulary.
 - A fast recurrent state updates on every byte.
-- A learned causal controller decides whether to consolidate the fast state into the slow state. When it does not consolidate, the slow state is held while fast processing continues.
+- A learned causal controller chooses **hold** or **consolidate**. During training, both candidate actions are evaluated against the observed next-byte target, and the lower-loss action teaches the policy. At inference, the target is unavailable to the controller.
 - The model predicts the next byte and a learned EOS control output. EOS is the model's learned generation-stop decision.
 - Recurrent state can be carried across arbitrary input chunks. There is no fixed inference context window in the architecture.
 - Training uses truncated backpropagation segments to fit finite GPU memory. This is a training resource limit, not a fixed context window. Inference still has finite physical memory and compute.
 
 ### First Colab experiment
 
-Open [the ECA Adaptive Text Training notebook](notebooks/ECA_Adaptive_Text_Training.ipynb) in Google Colab, select a T4 GPU, and run the cells in order. The notebook streams a small FineWeb-Edu sample from Hugging Face and saves the checkpoint to Google Drive.
+Open [the ECA-0.2 Adaptive Text Training notebook](https://colab.research.google.com/github/swasthik-s/eca/blob/eca-0.2-counterfactual-controller/notebooks/ECA_Adaptive_Text_Training.ipynb) in Google Colab, select a T4 GPU, and run the cells in order. The notebook streams a small FineWeb-Edu sample from Hugging Face and saves the checkpoint to Google Drive.
 
 Local smoke run:
 
@@ -258,4 +258,24 @@ pytest
 python -m eca.training.train --dataset smoke --steps 20 --max-bytes 50000 --sequence-length 128 --batch-size 2
 ```
 
-The first experiment is a prototype-scale feasibility test, not a GPT-1-scale pretraining run and not evidence of general intelligence. Record validation bits-per-byte, boundary rate, throughput, peak VRAM and checkpoint size. Compare against a parameter-matched byte-GRU baseline before attributing gains to adaptive segmentation.
+The ECA-0.2 experiment is a prototype-scale feasibility test, not a GPT-1-scale pretraining run and not evidence of general intelligence. Record validation bits-per-byte, policy loss, mean update probability, actual hard update rate, counterfactual teacher update rate, throughput and peak VRAM. The policy currently optimizes immediate next-byte loss; long-horizon memory utility remains unproven. Compare against a parameter-matched byte-GRU baseline before attributing gains to adaptive consolidation.
+
+
+## ECA-0.3: parallel matrix dynamics (experimental)
+
+ECA-0.3 tests batched matrix feature transformations and an associative affine scan for persistent state. It is a separate model so ECA-0.2 remains available as a baseline.
+
+- Model: \`ECAParallelMatrixModel\`
+- Trainer: \`python -m eca.training.train_parallel\`
+- T4 configuration: \`configs/t4_parallel_matrix.yaml\`
+- Architecture notes: [ECA-0.3 parallel matrix dynamics](docs/ECA_0.3_PARALLEL_MATRIX.md)
+
+Install and run a small smoke experiment:
+
+\`\`\`bash
+python -m pip install -e ".[train,dev]"
+pytest
+python -m eca.training.train_parallel --dataset smoke --steps 20 --max-bytes 50000 --sequence-length 128 --batch-size 2
+\`\`\`
+
+For the T4 experiment, use the same FineWeb-Edu dataset, seed, byte budget, batch size and sequence length as ECA-0.2. Record validation BPB, training bytes/second, peak VRAM and GPU utilization. The new architecture is not yet proven faster or more accurate. Its write-intensity regularizer does not currently skip GPU computation.

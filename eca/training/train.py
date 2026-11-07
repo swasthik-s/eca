@@ -1,4 +1,4 @@
-"""Minimal first-run trainer for ECA's adaptive recurrent byte model."""
+"""Trainer for ECA's adaptive recurrent byte-stream model."""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +10,33 @@ from torch.nn import functional as F
 
 from eca.text import ECAConfig, ECAStreamModel
 from eca.training.streaming import documents_to_byte_stream, iter_hf_text, make_next_byte_batch
+
+
+def evaluate(model, stream: list[int], sequence_length: int, device: str) -> float:
+    """Evaluate the complete held-out stream while carrying recurrent state."""
+    model.eval()
+    state = None
+    loss_sum = 0.0
+    target_count = 0
+    with torch.no_grad():
+        for start in range(0, len(stream) - 1, sequence_length):
+            valid_steps = min(sequence_length, len(stream) - 1 - start)
+            x, y = make_next_byte_batch(
+                stream, start, 1, sequence_length, device
+            )
+            with torch.autocast(
+                device_type=device, dtype=torch.float16, enabled=(device == "cuda")
+            ):
+                logits, _, state = model(x, state)
+            losses = F.cross_entropy(
+                logits[:, :valid_steps].float().reshape(-1, 257),
+                y[:, :valid_steps].reshape(-1),
+                reduction="sum",
+            )
+            loss_sum += float(losses)
+            target_count += valid_steps
+            state = state.detach()
+    return loss_sum / max(1, target_count) / math.log(2)
 
 
 def train(args: argparse.Namespace) -> None:
@@ -38,17 +65,21 @@ def train(args: argparse.Namespace) -> None:
     )
     if len(train_stream) < args.sequence_length + 2:
         raise RuntimeError("Not enough training bytes. Increase --max-bytes or dataset documents.")
-    if len(valid_stream) < args.sequence_length + 2:
+    if len(valid_stream) < 2:
         raise RuntimeError("Not enough validation bytes. Increase --documents.")
 
     config = ECAConfig(hidden_size=args.hidden_size, byte_embedding_size=args.embedding_size)
     model = ECAStreamModel(config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=0.01)
-    scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
+    scaler = torch.amp.GradScaler("cuda", enabled=(device == "cuda"))
     print(f"device={device} parameters={sum(p.numel() for p in model.parameters()):,}")
     print(
         f"train_bytes_and_controls={len(train_stream):,} "
         f"valid_bytes_and_controls={len(valid_stream):,}"
+    )
+    print(
+        "controller=counterfactual_one_step "
+        f"policy_loss_weight={args.policy_loss_weight:.3f}"
     )
 
     lane_stride = len(train_stream) // args.batch_size
@@ -73,9 +104,12 @@ def train(args: argparse.Namespace) -> None:
         with torch.autocast(
             device_type=device, dtype=torch.float16, enabled=(device == "cuda")
         ):
-            logits, boundaries, state = model(x, state)
+            logits, boundary_probabilities, state, auxiliary = model(
+                x, state, targets=y, return_auxiliary=True
+            )
             prediction_loss = F.cross_entropy(logits.reshape(-1, 257), y.reshape(-1))
-            loss = prediction_loss
+            policy_loss = auxiliary["policy_loss"]
+            loss = prediction_loss + args.policy_loss_weight * policy_loss
 
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
@@ -85,25 +119,14 @@ def train(args: argparse.Namespace) -> None:
         state = state.detach()
 
         if step == 1 or step % args.log_every == 0:
-            model.eval()
-            with torch.no_grad():
-                vx, vy = make_next_byte_batch(
-                    valid_stream,
-                    0,
-                    1,
-                    min(args.sequence_length, len(valid_stream) - 1),
-                    device,
-                )
-                with torch.autocast(
-                    device_type=device, dtype=torch.float16, enabled=(device == "cuda")
-                ):
-                    vlogits, vboundaries, _ = model(vx)
-                    vloss = F.cross_entropy(vlogits.reshape(-1, 257), vy.reshape(-1))
-            bpb = float(vloss) / math.log(2)
+            valid_bpb = evaluate(model, valid_stream, args.sequence_length, device)
             print(
                 f"step={step:5d} train_loss={prediction_loss.detach().item():.4f} "
-                f"valid_bpb={bpb:.4f} boundary_rate={boundaries.detach().mean().item():.3f} "
-                f"valid_boundary_rate={vboundaries.mean().item():.3f}"
+                f"policy_loss={policy_loss.detach().item():.4f} "
+                f"valid_bpb={valid_bpb:.4f} "
+                f"update_prob={boundary_probabilities.detach().mean().item():.3f} "
+                f"hard_update_rate={auxiliary['hard_boundary'].detach().mean().item():.3f} "
+                f"oracle_update_rate={auxiliary['oracle_update_rate'].detach().item():.3f}"
             )
 
     output = Path(args.output)
@@ -115,6 +138,7 @@ def train(args: argparse.Namespace) -> None:
             "step": args.steps,
             "seed": args.seed,
             "dataset": args.dataset_id if args.dataset == "hf" else "smoke",
+            "controller": "counterfactual_one_step",
         },
         output,
     )
@@ -139,6 +163,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--hidden-size", type=int, default=192)
     p.add_argument("--embedding-size", type=int, default=48)
     p.add_argument("--learning-rate", type=float, default=3e-4)
+    p.add_argument(
+        "--policy-loss-weight",
+        type=float,
+        default=0.25,
+        help="Weight for learning the hold-versus-update action from counterfactual losses",
+    )
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--seed", type=int, default=17)
     p.add_argument("--output", default="checkpoints/eca_adaptive_text.pt")

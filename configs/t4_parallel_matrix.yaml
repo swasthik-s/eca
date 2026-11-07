@@ -1,0 +1,39 @@
+model:
+  architecture: ECAParallelMatrixModel
+  version: "0.3-experimental"
+  hidden_size: 144
+  byte_embedding_size: 32
+  depth: 1
+  kernel_size: 5
+  input_alphabet: 257
+  output_alphabet: 257
+  recurrence: elementwise_affine_associative_scan
+  attention: false
+  transformer_components: false
+  tokenizer: raw_utf8_bytes
+training:
+  dataset: HuggingFaceFW/fineweb-edu
+  dataset_config: sample-10BT
+  streaming: true
+  max_bytes: 2000000
+  steps: 1000
+  batch_size: 8
+  tbptt_segment_length: 256
+  learning_rate: 0.0003
+  write_cost_weight: 0.001
+  precision: fp16
+  checkpoint: checkpoints/eca_parallel_matrix_0_3.pt
+evaluation:
+  full_validation_stream: true
+  log_write_intensity: true
+  log_bytes_per_second: true
+  log_peak_vram: true
+notes:
+  - Raw UTF-8 bytes use IDs 0..255; ID 256 is a structural EOS control symbol.
+  - Position-wise feature projections are applied to the full sequence tensor.
+  - Causal depthwise convolution provides local temporal features and caches its left history across chunks.
+  - Persistent state uses a parallel associative scan over elementwise affine transitions.
+  - The scan has logarithmic sequential depth in sequence length and no attention matrix.
+  - TBPTT segment length is a training memory limit, not an inference context window.
+  - The write-cost term regularizes memory writes; it does not yet skip GPU arithmetic.
+  - This is an experimental architecture, not a validated performance improvement.
