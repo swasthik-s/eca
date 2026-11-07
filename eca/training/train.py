@@ -39,17 +39,21 @@ def train(args: argparse.Namespace) -> None:
     print(f"device={device} parameters={sum(p.numel() for p in model.parameters()):,}")
     print(f"stream_values={len(stream):,} train_values={len(train_stream):,} valid_values={len(valid_stream):,}")
 
+    lane_stride = len(train_stream) // args.batch_size
+    segments_per_lane = max(1, (lane_stride - args.sequence_length - 1) // args.sequence_length)
+    state = None
     for step in range(1, args.steps + 1):
         model.train()
-        start = ((step - 1) * args.batch_size * args.sequence_length) % max(
-            1, len(train_stream) - args.batch_size * args.sequence_length - 1
-        )
+        segment_index = (step - 1) % segments_per_lane
+        start = segment_index * args.sequence_length
+        if segment_index == 0:
+            state = None
         x, y = make_next_byte_batch(
-            train_stream, start, args.batch_size, args.sequence_length, device
+            train_stream, start, args.batch_size, args.sequence_length, device, lane_stride
         )
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast(device_type=device, dtype=torch.float16, enabled=(device == "cuda")):
-            logits, boundaries, _ = model(x)
+            logits, boundaries, state = model(x, state)
             prediction_loss = F.cross_entropy(logits.reshape(-1, 257), y.reshape(-1))
             # Light regularization prevents the controller from opening a segment
             # at every byte before it has learned useful predictive structure.
@@ -60,6 +64,7 @@ def train(args: argparse.Namespace) -> None:
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(optimizer)
         scaler.update()
+        state = state.detach()
 
         if step == 1 or step % args.log_every == 0:
             model.eval()
