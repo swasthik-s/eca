@@ -1,10 +1,11 @@
 model:
   architecture: ECAStreamModel
+  version: "0.2"
   hidden_size: 192
   byte_embedding_size: 48
-  input_alphabet: 256
+  input_alphabet: 257
   output_alphabet: 257
-  adaptive_boundaries: true
+  adaptive_consolidation: counterfactual_policy
   recurrent_fast_slow_dynamics: true
   transformer_components: false
   attention: false
@@ -17,9 +18,20 @@ training:
   batch_size: 8
   tbptt_segment_length: 256
   learning_rate: 0.0003
+  policy_loss_weight: 0.25
   precision: fp16
   checkpoint: checkpoints/eca_adaptive_text.pt
+evaluation:
+  full_validation_stream: true
+  log_probability_update_rate: true
+  log_hard_update_rate: true
+  log_counterfactual_oracle_rate: true
 notes:
+  - Raw UTF-8 bytes use IDs 0..255; ID 256 is a structural EOS control symbol.
+  - The policy selects hold or consolidate with a learned two-action decision, not a fixed interval or boundary threshold.
+  - During training, both actions are evaluated against the observed next-byte target; the policy learns to predict which action gives lower immediate loss.
+  - At inference, the policy receives only causal state and prediction surprise; it never receives the next target.
+  - The current implementation computes the candidate slow update before selecting whether to write it. Sparse state updates are implemented; skipping update computation is a later optimization.
   - tbptt_segment_length bounds training activation memory; it is not an inference context window.
-  - recurrent state is carried across segments and can persist across arbitrarily many input chunks.
+  - recurrent state is carried across training segments and arbitrary inference chunks.
   - EOS is a learned output class; max_new_bytes is only a generation safety budget.
