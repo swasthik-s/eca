@@ -118,11 +118,15 @@ class ECAStreamModel(nn.Module):
             action = action_logits.argmax(dim=-1)
             update_mask = action.eq(1).unsqueeze(-1)
 
+            # The candidate update is computed in both modes. This avoids a
+            # per-byte host/device synchronization; sparse state writes are
+            # learned now, while compute-skipping is a separate optimization.
+            proposed_slow = self.slow_dynamics(fast, slow)
+
             if targets is not None:
-                # Training-only counterfactual: ask which action gave the
-                # lower next-byte loss for this observed target. At inference,
-                # the policy must choose without seeing the target.
-                proposed_slow = self.slow_dynamics(fast, slow)
+                # Training-only counterfactual: compare the next-byte loss
+                # under hold vs update. The policy never sees the target at
+                # inference and learns to predict which action is useful.
                 hold_logits = self._predict(fast, slow)
                 update_logits = self._predict(fast, proposed_slow)
                 target_t = targets[:, t]
@@ -138,13 +142,11 @@ class ECAStreamModel(nn.Module):
                 )
                 oracle_actions.append(oracle_action)
                 logits = torch.where(update_mask, update_logits, hold_logits)
-                slow = torch.where(update_mask, proposed_slow, slow)
             else:
-                if bool(update_mask.any()):
-                    proposed_slow = self.slow_dynamics(fast, slow)
-                    slow = torch.where(update_mask, proposed_slow, slow)
-                logits = self._predict(fast, slow)
+                selected_slow = torch.where(update_mask, proposed_slow, slow)
+                logits = self._predict(fast, selected_slow)
 
+            slow = torch.where(update_mask, proposed_slow, slow)
             logits_out.append(logits)
             probability_out.append(action_probabilities[:, 1])
             hard_out.append(action.to(torch.float32))
