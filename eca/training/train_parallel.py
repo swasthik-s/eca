@@ -176,9 +176,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--sequence-length", type=int, default=256)
     parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--hidden-size", type=int, default=192)
-    parser.add_argument("--embedding-size", type=int, default=48)
-    parser.add_argument("--depth", type=int, default=3)
+    # Near-parameter-matched to the user's ~252k ECA-0.2 run.
+    parser.add_argument("--hidden-size", type=int, default=144)
+    parser.add_argument("--embedding-size", type=int, default=32)
+    parser.add_argument("--depth", type=int, default=1)
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--dropout", type=float, default=0.05)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
