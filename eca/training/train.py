@@ -101,9 +101,9 @@ def train(args: argparse.Namespace) -> None:
                     vloss = F.cross_entropy(vlogits.reshape(-1, 257), vy.reshape(-1))
             bpb = float(vloss) / math.log(2)
             print(
-                f"step={step:5d} train_loss={float(prediction_loss):.4f} "
-                f"valid_bpb={bpb:.4f} boundary_rate={float(boundaries.mean()):.3f} "
-                f"valid_boundary_rate={float(vboundaries.mean()):.3f}"
+                f"step={step:5d} train_loss={prediction_loss.detach().item():.4f} "
+                f"valid_bpb={bpb:.4f} boundary_rate={boundaries.detach().mean().item():.3f} "
+                f"valid_boundary_rate={vboundaries.mean().item():.3f}"
             )
 
     output = Path(args.output)
