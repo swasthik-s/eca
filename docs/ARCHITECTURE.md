@@ -100,3 +100,30 @@ Every new mechanism must include:
 - recorded limitations and negative results.
 
 Architecture changes should be adopted only when they improve a defined metric without unacceptable regressions.
+
+
+## ECA-0.3: parallel matrix dynamics (experimental)
+
+ECA-0.3 is a separate experimental model, not a replacement for the ECA-0.2 baseline.
+
+Processing path:
+
+\`UTF-8 bytes → batched embedding/projection → causal depthwise convolution → gated matrix blocks → affine state scan → byte/EOS prediction\`
+
+The feature projections operate on the full \`[batch, time, hidden]\` tensor. A causal depthwise convolution supplies local temporal features and carries its left-history cache across input chunks.
+
+Persistent state uses a learned elementwise affine recurrence:
+
+\`h[t] = a[t] ⊙ h[t-1] + b[t]\`
+
+The affine transitions compose associatively, allowing a logarithmic-depth parallel prefix scan across sequence positions. This is not self-attention and does not form a pairwise attention matrix. The recurrence uses elementwise retention rather than a dense matrix-valued state transition.
+
+### ECA-0.3 limitations and measurements
+
+- The architecture is an experimental hypothesis; no speed or quality improvement has yet been demonstrated.
+- The write-intensity regularizer discourages unnecessary memory writes but does not currently skip GPU arithmetic.
+- The learned projections use standard joint gradient-based training. The model does not rewrite CUDA kernels or schedule GPU hardware.
+- The local convolution has a finite receptive field. Persistent scan state carries information across arbitrary chunks, subject to finite state capacity.
+- Compare validation BPB, training bytes/second, peak VRAM and active GPU utilization against ECA-0.2 on identical data, seed and T4 settings.
+- Verify the associative scan against a sequential reference and verify chunk-equivalent outputs before training.
+- Run multiple seeds and compare parameter counts before claiming an advantage.
