@@ -6,7 +6,7 @@ ECA is a research and engineering project exploring computational foundations fo
 
 > **Core principle:** language is one modality, not the foundation of the entire intelligence system.
 
-**Status:** Early architecture development  
+**Status:** ECA-0.1 adaptive recurrent text prototype implemented; first GPU experiment pending  
 **Language:** Python  
 **Initial research hardware:** NVIDIA T4 (15 GB VRAM)  
 **Initial framework:** PyTorch  
@@ -208,7 +208,7 @@ Contributions should include tests where applicable and clearly state whether a 
 
 Develop and experimentally validate an adaptive, multimodal cognitive architecture that can acquire knowledge from experience, form reusable representations, build predictive models, reason about unfamiliar situations, retain useful knowledge and generate different forms of information.
 
-**The objective is not to reproduce the Transformer. It is to investigate and build an experimentally defensible alternative computational foundation for AI.**
+**The objective is not to reproduce the Transformer. ECA-0.1 deliberately excludes self-attention, multi-head attention, positional embeddings, Transformer blocks and pretrained Transformer backbones. It uses byte embeddings, fast/slow recurrent dynamics and a learned causal boundary controller. The project will build and test its own computational method.**
 
 ---
 
@@ -231,3 +231,31 @@ python examples/first_observation.py
 ```
 
 The initial prototype uses NumPy and runs on CPU. PyTorch and GPU training will be introduced when the first learned components are ready.
+
+
+## ECA-0.1: adaptive recurrent text model
+
+The first learned model is a compact, from-scratch PyTorch system:
+
+`UTF-8 byte stream → fast recurrent state → adaptive boundary controller → gated slow-state consolidation → next-byte/EOS prediction`
+
+- Input is raw UTF-8 bytes (0–255) plus one structural end-of-document control symbol; there is no BPE, WordPiece, SentencePiece or manually defined word vocabulary.
+- A fast recurrent state updates on every byte.
+- A learned causal controller decides whether to consolidate the fast state into the slow state. When it does not consolidate, the slow state is held while fast processing continues.
+- The model predicts the next byte and a learned EOS control output. EOS is the model's learned generation-stop decision.
+- Recurrent state can be carried across arbitrary input chunks. There is no fixed inference context window in the architecture.
+- Training uses truncated backpropagation segments to fit finite GPU memory. This is a training resource limit, not a fixed context window. Inference still has finite physical memory and compute.
+
+### First Colab experiment
+
+Open [the ECA Adaptive Text Training notebook](notebooks/ECA_Adaptive_Text_Training.ipynb) in Google Colab, select a T4 GPU, and run the cells in order. The notebook streams a small FineWeb-Edu sample from Hugging Face and saves the checkpoint to Google Drive.
+
+Local smoke run:
+
+```bash
+python -m pip install -e ".[train,dev]"
+pytest
+python -m eca.training.train --dataset smoke --steps 20 --max-bytes 50000 --sequence-length 128 --batch-size 2
+```
+
+The first experiment is a prototype-scale feasibility test, not a GPT-1-scale pretraining run and not evidence of general intelligence. Record validation bits-per-byte, boundary rate, throughput, peak VRAM and checkpoint size. Compare against a parameter-matched byte-GRU baseline before attributing gains to adaptive segmentation.
