@@ -6,7 +6,7 @@ ECA is a research and engineering project exploring computational foundations fo
 
 > **Core principle:** language is one modality, not the foundation of the entire intelligence system.
 
-**Status:** ECA-0.2 counterfactual adaptive-consolidation experiment implemented; T4 validation pending  
+**Status:** ECA-0.2 adaptive-consolidation baseline and ECA-0.3 parallel matrix experiment implemented; ECA-0.3 T4 validation pending  
 **Language:** Python  
 **Initial research hardware:** NVIDIA T4 (15 GB VRAM)  
 **Initial framework:** PyTorch  
@@ -259,3 +259,23 @@ python -m eca.training.train --dataset smoke --steps 20 --max-bytes 50000 --sequ
 ```
 
 The ECA-0.2 experiment is a prototype-scale feasibility test, not a GPT-1-scale pretraining run and not evidence of general intelligence. Record validation bits-per-byte, policy loss, mean update probability, actual hard update rate, counterfactual teacher update rate, throughput and peak VRAM. The policy currently optimizes immediate next-byte loss; long-horizon memory utility remains unproven. Compare against a parameter-matched byte-GRU baseline before attributing gains to adaptive consolidation.
+
+
+## ECA-0.3: parallel matrix dynamics (experimental)
+
+ECA-0.3 tests batched matrix feature transformations and an associative affine scan for persistent state. It is a separate model so ECA-0.2 remains available as a baseline.
+
+- Model: \`ECAParallelMatrixModel\`
+- Trainer: \`python -m eca.training.train_parallel\`
+- T4 configuration: \`configs/t4_parallel_matrix.yaml\`
+- Architecture notes: [ECA-0.3 parallel matrix dynamics](docs/ECA_0.3_PARALLEL_MATRIX.md)
+
+Install and run a small smoke experiment:
+
+\`\`\`bash
+python -m pip install -e ".[train,dev]"
+pytest
+python -m eca.training.train_parallel --dataset smoke --steps 20 --max-bytes 50000 --sequence-length 128 --batch-size 2
+\`\`\`
+
+For the T4 experiment, use the same FineWeb-Edu dataset, seed, byte budget, batch size and sequence length as ECA-0.2. Record validation BPB, training bytes/second, peak VRAM and GPU utilization. The new architecture is not yet proven faster or more accurate. Its write-intensity regularizer does not currently skip GPU computation.
