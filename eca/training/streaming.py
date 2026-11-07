@@ -51,11 +51,11 @@ def make_next_byte_batch(
     x_rows, y_rows = [], []
     stride = sequence_length
     for b in range(batch_size):
-        offset = start + b * stride
+        offset = start + b * (lane_stride if lane_stride is not None else stride)
         segment = stream[offset : offset + sequence_length + 1]
         if len(segment) < sequence_length + 1:
             segment = segment + [256] * (sequence_length + 1 - len(segment))
-        x_rows.append([v if v < 256 else 0 for v in segment[:-1]])
+        x_rows.append(segment[:-1])
         y_rows.append(segment[1:])
     return (
         torch.tensor(x_rows, dtype=torch.long, device=device),
